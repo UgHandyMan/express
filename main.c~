@@ -1,0 +1,333 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sqlite3.h>
+#include <gtk/gtk.h>
+
+// Prototypes
+void deposits_button_clicked(GtkButton *button, gpointer user_data);
+void loans_button_clicked(GtkButton *button, gpointer user_data);
+void new_clients_button_clicked(GtkButton *button, gpointer user_data);
+void dashboard_button_clicked(GtkButton *button, gpointer user_data);
+
+void submit_deposits(GtkButton *button, gpointer user_data);
+void submit_loans(GtkButton *button, gpointer user_data);
+void submit_new_clients(GtkButton *button, gpointer user_data);
+void dashboard_refresh(GtkButton *button, gpointer user_data);
+
+
+
+// SQLite database connection
+sqlite3* db;
+
+// Function to initialize the SQLite database
+void initializeDatabase() {
+    int rc;
+
+    rc = sqlite3_open("data.db", &db);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        exit(1);
+    }
+
+     // Create necessary tables if they don't exist
+    char* createDepositsTable = "CREATE TABLE IF NOT EXISTS deposits (id INTEGER PRIMARY KEY, name TEXT, date TEXT, amount REAL, notes TEXT);";
+    rc = sqlite3_exec(db, createDepositsTable, 0, 0, 0);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        exit(1);
+    }
+
+    // Create necessary tables if they don't exist
+    char* createLoansTable = "CREATE TABLE IF NOT EXISTS loans (id INTEGER PRIMARY KEY, name TEXT, date TEXT, amount REAL, notes TEXT);";
+    rc = sqlite3_exec(db, createLoansTable, 0, 0, 0);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        exit(1);
+    }
+    // Create necessary tables if they don't exist
+    char* createNewClientsTable = "CREATE TABLE IF NOT EXISTS newclients (id INTEGER PRIMARY KEY, name TEXT, date TEXT, amount REAL, notes TEXT);";
+    rc = sqlite3_exec(db, createNewClientsTable, 0, 0, 0);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        exit(1);
+    }
+
+}
+
+// Function to close the SQLite database connection
+void closeDatabase() {
+    sqlite3_close(db);
+}
+
+
+// Function to handle the login button click
+void login_button_clicked(GtkButton *button, gpointer user_data) {
+    // Get the username and password entries
+    GtkEntry *username_entry = GTK_ENTRY(gtk_builder_get_object(user_data, "username_entry"));
+    GtkEntry *password_entry = GTK_ENTRY(gtk_builder_get_object(user_data, "password_entry"));
+
+    // Get the entered username and password
+    const gchar *username = gtk_entry_get_text(username_entry);
+    const gchar *password = gtk_entry_get_text(password_entry);
+
+    // Validate the username and password
+    if (g_strcmp0(username, "admin") == 0 && g_strcmp0(password, "password") == 0) {
+        // Hide the login window
+        GtkWindow *login_window = GTK_WINDOW(gtk_builder_get_object(user_data, "login_window"));
+        gtk_widget_hide(GTK_WIDGET(login_window));
+
+        // Show the main application window
+        GtkWindow *main_window = GTK_WINDOW(gtk_builder_get_object(user_data, "main_window"));
+        gtk_widget_show(GTK_WIDGET(main_window));
+    } else {
+        // Show an error message
+        GtkLabel *result_label = GTK_LABEL(gtk_builder_get_object(user_data, "result_label"));
+        gtk_label_set_text(result_label, "Invalid username or password. Please try again.");
+    }
+}
+
+// Function to handle the logout button click
+void logout_button_clicked(GtkButton *button, gpointer user_data) {
+    // Hide the main application window
+    GtkWindow *main_window = GTK_WINDOW(gtk_builder_get_object(user_data, "main_window"));
+    gtk_widget_hide(GTK_WIDGET(main_window));
+
+    // Clear the username and password entries
+    GtkEntry *username_entry = GTK_ENTRY(gtk_builder_get_object(user_data, "username_entry"));
+    GtkEntry *password_entry = GTK_ENTRY(gtk_builder_get_object(user_data, "password_entry"));
+    gtk_entry_set_text(username_entry, "");
+    gtk_entry_set_text(password_entry, "");
+
+    // Show the login window
+    GtkWindow *login_window = GTK_WINDOW(gtk_builder_get_object(user_data, "login_window"));
+    gtk_widget_show(GTK_WIDGET(login_window));
+}
+
+// Function to handle the "Deposits" button click
+void deposits_button_clicked(GtkButton *button, gpointer user_data) {
+    // Create a new window for deposits
+    GtkWidget *deposits_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(deposits_window), "Deposits");
+    gtk_window_set_default_size(GTK_WINDOW(deposits_window), 400, 300);
+
+    //create a form
+    GtkWidget *form = gtk_grid_new();
+
+    //create form labels and entries
+    GtkWidget *label_name = gtk_label_new("Name: ");
+    GtkWidget *entry_name = gtk_entry_new();
+
+    GtkWidget *label_date = gtk_label_new("Date: ");
+    GtkWidget *entry_date = gtk_entry_new();
+
+    GtkWidget *label_amount = gtk_label_new("Amount: ");
+    GtkWidget *entry_amount = gtk_entry_new();
+
+    GtkWidget *label_notes = gtk_label_new("Notes: ");
+    GtkWidget *entry_notes = gtk_entry_new();
+
+    //Add labels and entries to the form
+    gtk_grid_attach(GTK_GRID(form), label_name, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_name, 1, 0, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_date, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_date, 1, 1, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_amount, 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_amount, 1, 2, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_notes, 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_notes, 1, 3, 1, 1);
+
+    //create a submit button
+
+    
+    //Add for to the deposit window
+    gtk_container_add(GTK_CONTAINER(deposits_window), form);
+
+    // Show the deposits window
+    gtk_widget_show_all(deposits_window);
+}
+
+// Function to handle the "Loans" button click
+void loans_button_clicked(GtkButton *button, gpointer user_data) {
+    // Create a new window for loans
+    GtkWidget *loans_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(loans_window), "Loans");
+    gtk_window_set_default_size(GTK_WINDOW(loans_window), 400, 300);
+
+
+     //create a form
+    GtkWidget *form = gtk_grid_new();
+
+    //create form labels and entries
+    GtkWidget *label_name = gtk_label_new("Name: ");
+    GtkWidget *entry_name = gtk_entry_new();
+
+    GtkWidget *label_date = gtk_label_new("Date: ");
+    GtkWidget *entry_date = gtk_entry_new();
+
+    GtkWidget *label_amount = gtk_label_new("Amount: ");
+    GtkWidget *entry_amount = gtk_entry_new();
+
+    GtkWidget *label_notes = gtk_label_new("Notes: ");
+    GtkWidget *entry_notes = gtk_entry_new();
+
+     //Add labels and entries to the form
+    gtk_grid_attach(GTK_GRID(form), label_name, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_name, 1, 0, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_date, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_date, 1, 1, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_amount, 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_amount, 1, 2, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_notes, 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_notes, 1, 3, 1, 1);
+
+    //create a submit button
+
+    //Add for to the deposit window
+    gtk_container_add(GTK_CONTAINER(loans_window), form);
+
+    // Show the loans window
+    gtk_widget_show_all(loans_window);
+}
+
+// Function to handle the "New Clients" button click
+void new_clients_button_clicked(GtkButton *button, gpointer user_data) {
+    // Create a new window for new clients
+    GtkWidget *new_clients_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(new_clients_window), "New Clients");
+    gtk_window_set_default_size(GTK_WINDOW(new_clients_window), 400, 300);
+
+
+     //create a form
+    GtkWidget *form = gtk_grid_new();
+
+    //create form labels and entries
+    GtkWidget *label_name = gtk_label_new("Name: ");
+    GtkWidget *entry_name = gtk_entry_new();
+
+    GtkWidget *label_date = gtk_label_new("Date: ");
+    GtkWidget *entry_date = gtk_entry_new();
+
+    GtkWidget *label_address = gtk_label_new("Address: ");
+    GtkWidget *entry_address = gtk_entry_new();
+
+    GtkWidget *label_contact = gtk_label_new("Contact: ");
+    GtkWidget *entry_contact = gtk_entry_new();
+
+    GtkWidget *label_nin = gtk_label_new("National ID Number: ");
+    GtkWidget *entry_nin = gtk_entry_new();
+
+    GtkWidget *label_accid = gtk_label_new("Account ID: ");
+    GtkWidget *entry_accid = gtk_entry_new();
+
+     //Add labels and entries to the form
+    gtk_grid_attach(GTK_GRID(form), label_name, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_name, 1, 0, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_date, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_date, 1, 1, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_address, 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_address, 1, 2, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_contact, 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_contact, 1, 3, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_nin, 0, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_nin, 1, 4, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(form), label_accid, 0, 5, 1, 1);
+    gtk_grid_attach(GTK_GRID(form), entry_accid, 1, 5, 1, 1);
+
+
+    //create a submit button
+
+    //Add for to the deposit window
+    gtk_container_add(GTK_CONTAINER(new_clients_window), form);
+   
+    // Show the new clients window
+    gtk_widget_show_all(new_clients_window);
+}
+
+
+// Function to handle the "Dashboard" button click
+void dashboard_button_clicked(GtkButton *button, gpointer user_data) {
+    // Create a new window for the dashboard
+    GtkWidget *dashboard_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(dashboard_window), "Dashboard");
+    gtk_window_set_default_size(GTK_WINDOW(dashboard_window), 400, 300);
+
+    // Show the dashboard window
+    gtk_widget_show_all(dashboard_window);
+}
+
+int main(int argc, char *argv[]) {
+    // Initialize GTK
+    gtk_init(&argc, &argv);
+
+    // Create a new GtkBuilder instance
+    GtkBuilder *builder = gtk_builder_new();
+
+      // Load the UI from the Glade file
+    GtkBuilder *builder = gtk_builder_new();
+    gtk_builder_add_from_file(builder, "main.glade", NULL);
+    
+    // Load the UI file
+    gtk_builder_add_from_file(builder, "ui.glade", NULL);
+
+    // Get the main application window
+    GtkWindow *main_window = GTK_WINDOW(gtk_builder_get_object(builder, "main_window"));
+
+    // Get the menu buttons
+    GtkButton *deposits_button = GTK_BUTTON(gtk_builder_get_object(builder, "deposits_button"\
+));
+    GtkButton *loans_button = GTK_BUTTON(gtk_builder_get_object(builder, "loans_button"));
+    GtkButton *new_clients_button = GTK_BUTTON(gtk_builder_get_object(builder, "new_clients_b\
+utton"));
+    GtkButton *dashboard_button = GTK_BUTTON(gtk_builder_get_object(builder, "dashboard_butto\
+n"));
+
+    // Connect the callback functions to the menu buttons
+    g_signal_connect(deposits_button, "clicked", G_CALLBACK(deposits_button_clicked), NULL);
+    g_signal_connect(loans_button, "clicked", G_CALLBACK(loans_button_clicked), NULL);
+    g_signal_connect(new_clients_button, "clicked", G_CALLBACK(new_clients_button_clicked), N\
+ULL);
+    g_signal_connect(dashboard_button, "clicked", G_CALLBACK(dashboard_button_clicked), NULL)\
+;
+
+    // Get the logout button
+    GtkButton *logout_button = GTK_BUTTON(gtk_builder_get_object(builder, "logout_button"));
+
+    // Connect the callback function to the logout button
+    g_signal_connect(logout_button, "clicked", G_CALLBACK(logout_button_clicked), builder);
+
+    // Connect the callback function to the login button
+    GtkButton *login_button = GTK_BUTTON(gtk_builder_get_object(builder, "login_button"));
+    g_signal_connect(login_button, "clicked", G_CALLBACK(login_button_clicked), builder);
+
+    // Show the main application window
+    gtk_widget_show(GTK_WIDGET(main_window));
+
+    
+    // Start the main GTK loop
+    gtk_main();
+
+    // Clean up
+    g_object_unref(builder);
+
+    return 0;
+}
